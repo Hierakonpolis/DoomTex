@@ -1,0 +1,47 @@
+%% DoomTex :: tools/texsheet.tex
+%% Renders the four wall textures as pixel grids, for documentation.
+%% These bitmaps are not stored anywhere as art: they are computed by TeX
+%% from pattern arithmetic and a small integer hash, then cached.
+%%
+%% Run from the project root:   pdflatex tools/texsheet.tex
+\documentclass{article}
+\usepackage[paperwidth=336bp,paperheight=104bp,margin=6bp]{geometry}
+\usepackage{doomtex}
+\pagestyle{empty}\setlength{\parindent}{0pt}
+\ExplSyntaxOn
+\dim_const:Nn \c_zoom_dim {2bp}
+\cs_new_protected:Npn \texview #1
+  {
+    \vtop
+      {
+        \hbox
+          {
+            \int_step_inline:nnn {0} {31}
+              {
+                \vbox { \offinterlineskip
+                  \int_step_inline:nnn {0} {31}
+                    {
+                      \hbox
+                        {
+                          \textcolor { \dtexPC { \dtexTexel {#1} {##1} {####1} } {0} }
+                            { \vrule width \c_zoom_dim height \c_zoom_dim depth 0pt }
+                        }
+                    }
+                }
+              }
+          }
+      }
+  }
+\ExplSyntaxOff
+\begin{document}
+\ExplSyntaxOn
+\dtexLoadTextures:
+\hbox
+  {
+    \texview{1} \kern10bp \texview{2} \kern10bp \texview{3} \kern10bp \texview{4}
+  }
+\ExplSyntaxOff
+\par\kern3bp
+{\ttfamily\scriptsize
+ brick\hspace{50bp}tech~panel\hspace{34bp}stone\hspace{52bp}door}
+\end{document}
