@@ -11,6 +11,14 @@
 \int_const:Nn \c_dtex_horizon_int   {100}
 %% Physical size of one DoomTex pixel.
 \dim_const:Nn \c_dtex_px_dim {1bp}
+%% Seam overlap.  Poppler's Cairo backend (evince, xreader) antialiases
+%% every rectangle independently, so two exactly abutting fills each cover
+%% about half of the boundary device pixel and source-over compositing
+%% leaves the page showing through as a hairline grid.  Each band is
+%% therefore drawn slightly wider and deeper than its slot and the extra is
+%% taken back with a negative kern, so neighbours overlap by this much
+%% while the layout stays pixel-exact.
+\dim_const:Nn \c_dtex_overlap_dim {0.75bp}
 \ExplSyntaxOff
 \input{engine/fixed.tex}
 \input{engine/map.tex}

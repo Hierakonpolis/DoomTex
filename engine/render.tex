@@ -19,16 +19,25 @@
 \int_new:N \l_dtex_tex_int   \int_new:N \l_dtex_ucol_int
 
 %% One horizontal band, 1 pixel wide and #3 pixels tall.
-\cs_new_protected:Npn \dtexBand #1#2#3 % palette index, light level, height
+%% #4 is how far this band bleeds into its neighbour below.  The bleed is
+%% taken straight back with a negative kern, so it changes what is painted
+%% without moving anything.  Opaque world geometry always uses the full
+%% overlap; sprites pass 0pt where the next texture row is transparent, or
+%% the bleed would fill the hole the transparency is supposed to leave.
+\cs_new_protected:Npn \dtexBandOv #1#2#3#4 % palette, light level, height, bleed
   {
     \int_compare:nNnT {#3} > {0}
       {
         \hbox { \textcolor { \dtexPC {#1} {#2} }
-          { \vrule width \c_dtex_px_dim
+          { \vrule width \dim_eval:n { \c_dtex_px_dim + \c_dtex_overlap_dim }
                    height \dim_eval:n { \int_eval:n {#3} \c_dtex_px_dim }
-                   depth 0pt } }
+                   depth #4 } }
+        \kern -#4
       }
   }
+
+\cs_new_protected:Npn \dtexBand #1#2#3
+  { \dtexBandOv {#1} {#2} {#3} { \c_dtex_overlap_dim } }
 
 %% Emit the ceiling gradient over screen rows [#1,#2), top to bottom.
 \cs_new_protected:Npn \dtexCeilBands #1#2
@@ -111,7 +120,7 @@
     \hbox
       {
         \int_step_inline:nnn {0} { \c_dtex_screen_w_int - 1 }
-          { \dtexRenderColumn {##1} }
+          { \dtexRenderColumn {##1} \kern -\c_dtex_overlap_dim }
       }
   }
 
@@ -183,8 +192,15 @@
                                 { \int_eval:n
                                     { \l_dtex_spcol_int - \l_dtex_sprun_int }
                                   \c_dtex_px_dim } }
-                            { \dtexBand { \l_dtex_sppal_int } {#6}
-                                { \l_dtex_spcol_int - \l_dtex_sprun_int } }
+                            {
+                              \dtexBandOv { \l_dtex_sppal_int } {#6}
+                                { \l_dtex_spcol_int - \l_dtex_sprun_int }
+                                {
+                                  \int_compare:nNnTF
+                                    { \dtexSpTexel {#4} {#3} { (##1)+1 } } = {255}
+                                    { 0pt } { \c_dtex_overlap_dim }
+                                }
+                            }
                         }
                     }
                 }

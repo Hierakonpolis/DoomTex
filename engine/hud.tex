@@ -100,9 +100,12 @@
               \int_step_inline:nnn {0} {11}
                 {
                   \textcolor { \dtexPC { \dtex_face_pix:nn {####1} {##1} } {0} }
-                    { \vrule width 2bp height 2bp depth 0pt }
+                    { \vrule width \dim_eval:n { 2bp + \c_dtex_overlap_dim }
+                             height 2bp depth \c_dtex_overlap_dim }
+                  \kern -\c_dtex_overlap_dim
                 }
             }
+          \kern -\c_dtex_overlap_dim
         }
     }
   }

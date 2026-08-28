@@ -114,6 +114,43 @@ This matters: at 288 dpi the output is pixel-exact, with zero blend pixels
 between bands and a single colour change across 200 abutting columns. Fractional
 heights produce visible seams; integers do not.
 
+### Exactly abutting rectangles are not enough
+
+Getting the geometry pixel-exact still left a fault that only some PDF viewers
+show. Poppler has two rasterisers: `pdftoppm` and Okular use **Splash**, while
+evince, xreader and most GTK viewers use **Cairo**. Cairo antialiases every
+rectangle independently, so where two fills share an edge they each cover about
+half of the boundary device pixel, and source-over compositing leaves
+`(1-a₁)(1-a₂)` of the page showing through. About a quarter of the background
+leaks out as a hairline, and roughly ten thousand rectangles per frame turn that
+into a grid of faint squares over the whole viewport — at every zoom level,
+including 1:1.
+
+The fix is to let each band bleed into its neighbour below and to the right, and
+take the bleed straight back with a negative kern so nothing moves:
+
+```tex
+\hbox { \vrule width \dim_eval:n { \c_dtex_px_dim + \c_dtex_overlap_dim }
+               height <h> depth \c_dtex_overlap_dim }
+\kern -\c_dtex_overlap_dim
+```
+
+The overflow is always painted over by the next band, so the visible image is
+unchanged; only the boundary pixel goes from partly-covered-twice to
+fully-covered. The overlap has to be at least one device pixel to close the seam
+completely, which is why it is `0.75bp` — one pixel at 96 dpi. Measured against
+a Splash render as ground truth, over pixels whose neighbourhood is a single
+flat colour:
+
+| overlap | flat-region pixels contaminated | worst deviation |
+|---------|--------------------------------|-----------------|
+| `0bp`   | 53.7% | 62 |
+| `0.75bp`| 0.23% | 14 |
+
+Sprites pass `0pt` instead wherever the next texture row is transparent: there
+the bleed has nothing to paint over, and would fill in the hole the transparency
+exists to leave.
+
 Sprites are a second pass drawn on top, positioned with `\rlap`/`\raisebox`, and
 each sprite column is tested against the wall distance recorded for that screen
 column, so monsters are properly hidden behind geometry.
