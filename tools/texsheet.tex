@@ -3,6 +3,10 @@
 %% These bitmaps are not stored anywhere as art: they are computed by TeX
 %% from pattern arithmetic and a small integer hash, then cached.
 %%
+%% Texels overlap their neighbours by \c_dtex_overlap_dim for the same
+%% reason the renderer's bands do: without it, Cairo-based PDF viewers
+%% show a hairline grid between abutting fills.  See IMPLEMENTATION.md.
+%%
 %% Run from the project root:   pdflatex tools/texsheet.tex
 \documentclass{article}
 \usepackage[paperwidth=336bp,paperheight=104bp,margin=6bp]{geometry}
@@ -24,10 +28,19 @@
                       \hbox
                         {
                           \textcolor { \dtexPC { \dtexTexel {#1} {##1} {####1} } {0} }
-                            { \vrule width \c_zoom_dim height \c_zoom_dim depth 0pt }
+                            { \vrule
+                                width \dim_eval:n
+                                  { \c_zoom_dim
+                                    + \int_compare:nNnTF {##1} = {31} {0pt}
+                                                                       {\c_dtex_overlap_dim} }
+                                height \c_zoom_dim
+                                depth \int_compare:nNnTF {####1} = {31} {0pt}
+                                                                        {\c_dtex_overlap_dim} }
                         }
+                      \kern -\int_compare:nNnTF {####1} = {31} {0pt} {\c_dtex_overlap_dim}
                     }
                 }
+                \kern -\int_compare:nNnTF {##1} = {31} {0pt} {\c_dtex_overlap_dim}
               }
           }
       }

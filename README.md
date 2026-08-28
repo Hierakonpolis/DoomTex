@@ -5,9 +5,9 @@ Doom, rendered by TeX macro expansion. **One `pdflatex` run produces one frame.*
 ![A frame of DoomTex: an imp ahead, muzzle flash, a corpse on the floor, and the
 text-mode sound block above the viewport](docs/frame.png)
 
-Everything above is a PDF page. The walls, the imp, the pistol, the muzzle
-flash, the red damage border and the status bar are all rules placed by TeX
-macros; the sound is text.
+That is a PDF page. The walls, the imp, the pistol, the muzzle flash, the
+damage border and the status bar are all rules placed by TeX macros. The sound
+is text.
 
 ```
 input.txt  +  state.tex   ->   pdflatex doom.tex   ->   doom.pdf  +  state.tex
@@ -61,11 +61,11 @@ MUS "At Doom's Gate" (E1M1)                    ██████░░  bar 17/
 > DSBGSIT1    vol ████░░░░░░   L --|---------- R
 ```
 
-The volume and pan meters are not decoration. They are computed from the actual
-distance and bearing between the player and whatever made the sound, using the
-camera's right-hand vector, so an imp waking up behind you to the left reads as
-quiet and panned left. The block is always the same height whether three sounds
-are playing or none, so the frame never shifts on the page.
+The volume and pan meters are computed from the distance and bearing between
+the player and whatever made the sound, using the camera's right-hand vector, so
+an imp waking up behind you and to the left reads as quiet and panned left. The
+block is a fixed height whether three sounds are playing or none, so the frame
+never shifts on the page.
 
 ## How it works
 
@@ -85,103 +85,20 @@ are playing or none, so the frame never shifts on the page.
 | `engine/hud.tex` | weapon, damage border, status bar |
 | `engine/logic.tex` | movement, collision, doors, pickups, combat, AI |
 
-### Numbers are integers scaled by 1024
+The level is a 24x24 grid of digits in `engine/map.tex`, with a start room, a
+pillared hall, a stone vault behind a door, three imps, a medkit and an ammo
+clip. Walls are drawn by a DDA raycaster, one ray per screen column; monsters
+and items are billboard sprites depth-tested against the wall distances.
 
-TeX has no floating point that is fast enough to use 320 times a frame, so
-everything is an integer scaled by 1024. `1.0` is `1024`; angles run `0..1023`
-for a full turn.
-
-The trap that costs the most time here: **`\numexpr` rounds division, it does
-not truncate.** `5/2` is `3`. Using bare `/` to turn a world coordinate into a
-grid index silently reads the wrong cell, and a texture column computed as
-`1023/32` comes out as `32` — one past the end of a 32-wide texture. Every
-floor division goes through `\dtexFloorDiv`.
-
-Products overflow at 2³¹, loudly (`! Arithmetic overflow`), so there are two
-multiplies: `\dtexMul` for the raycaster's inner loop where both operands are
-small, and `\dtexMulS`, which splits an operand, everywhere else.
-
-### The renderer draws no coordinates
-
-Each screen column is a `\vbox` with `\offinterlineskip` holding a stack of
-coloured rules: ceiling gradient, then wall texture segments, then floor
-gradient. Boxes stacked that way abut exactly, so the vertical layout falls out
-of TeX's box model and there is no per-pixel positioning arithmetic at all. All
-band heights are integers and each column is computed as differences from a
-running cursor, so ceiling + wall + floor is always exactly 200 pixels.
-
-This matters: at 288 dpi the output is pixel-exact, with zero blend pixels
-between bands and a single colour change across 200 abutting columns. Fractional
-heights produce visible seams; integers do not.
-
-### Exactly abutting rectangles are not enough
-
-Getting the geometry pixel-exact still left a fault that only some PDF viewers
-show. Poppler has two rasterisers: `pdftoppm` and Okular use **Splash**, while
-evince, xreader and most GTK viewers use **Cairo**. Cairo antialiases every
-rectangle independently, so where two fills share an edge they each cover about
-half of the boundary device pixel, and source-over compositing leaves
-`(1-a₁)(1-a₂)` of the page showing through. About a quarter of the background
-leaks out as a hairline, and roughly ten thousand rectangles per frame turn that
-into a grid of faint squares over the whole viewport — at every zoom level,
-including 1:1.
-
-The fix is to let each band bleed into its neighbour below and to the right, and
-take the bleed straight back with a negative kern so nothing moves:
-
-```tex
-\hbox { \vrule width \dim_eval:n { \c_dtex_px_dim + \c_dtex_overlap_dim }
-               height <h> depth \c_dtex_overlap_dim }
-\kern -\c_dtex_overlap_dim
-```
-
-The overflow is always painted over by the next band, so the visible image is
-unchanged; only the boundary pixel goes from partly-covered-twice to
-fully-covered. The overlap has to be at least one device pixel to close the seam
-completely, which is why it is `0.75bp` — one pixel at 96 dpi. Measured against
-a Splash render as ground truth, over pixels whose neighbourhood is a single
-flat colour:
-
-| overlap | flat-region pixels contaminated | worst deviation |
-|---------|--------------------------------|-----------------|
-| `0bp`   | 53.7% | 62 |
-| `0.75bp`| 0.23% | 14 |
-
-Sprites pass `0pt` instead wherever the next texture row is transparent: there
-the bleed has nothing to paint over, and would fill in the hole the transparency
-exists to leave.
-
-Sprites are a second pass drawn on top, positioned with `\rlap`/`\raisebox`, and
-each sprite column is tested against the wall distance recorded for that screen
-column, so monsters are properly hidden behind geometry.
-
-### Lookup, don't compute
-
-![The four wall textures, generated by TeX from pattern arithmetic and an
-integer hash](docs/textures.png)
-
-Those bitmaps are not stored as art anywhere. They are computed from pattern
-arithmetic and a small integer hash; `pdflatex tools/texsheet.tex` redraws the
-sheet above from the same data the renderer samples.
-
-The sine table and the four wall textures are computed by TeX on the first run
-and cached to `cache/` as flat macro calls, so later frames pay nothing. Every
-texel becomes its own control sequence, making sampling a hash probe instead of
-a walk along a string. Distance shading is a lookup too: 16 palette entries × 8
-light levels are defined once, so shading a band costs a `\csname`, not
-arithmetic.
-
-Delete `cache/` and it regenerates itself.
+[IMPLEMENTATION.md](IMPLEMENTATION.md) covers the fixed-point arithmetic, the
+box-model renderer, the procedural textures, and the `\numexpr` and PDF
+rasteriser problems that shaped them.
 
 ## Performance
 
-On TeX Live 2023, 320×200:
-
-| | |
-|---|---|
-| cold start (both tables generated) | ~1.0 s |
-| steady-state frame | ~0.77 s |
-| PDF per frame | ~65 kB |
+About 0.8 to 0.9 s per frame on TeX Live 2023 at 320x200, and roughly 1.0 s on the
+first run, which also generates the sine table and the textures. Each frame is
+a ~68 kB PDF.
 
 ## Requirements
 
