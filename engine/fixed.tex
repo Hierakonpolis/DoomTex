@@ -1,0 +1,151 @@
+%% DoomTex :: engine/fixed.tex
+%% Fixed-point arithmetic and trigonometry. Pure TeX macro expansion.
+%%
+%% Representation: integers scaled by 1024 (10 fractional bits).
+%%   real 1.0  ->  1024
+%%   real 0.5  ->   512
+%% Angles: 1024 units per full turn (so 256 = 90 degrees).
+%%
+%% CRITICAL: \numexpr ROUNDS division (ties away from zero); it does not
+%% truncate.  5/2 evaluates to 3, not 2.  Never use bare "/" for grid
+%% indexing -- use \dtexFloorDiv.  Verified in spikes/s1math.tex.
+\ExplSyntaxOn
+
+%% ------------------------------------------------------------------
+%% Integer helpers.  All expandable, usable inside \numexpr.
+%% ------------------------------------------------------------------
+
+%% Floor division for POSITIVE divisor.  Compensates for numexpr rounding.
+\cs_new:Npn \dtexFloorDiv #1#2
+  { \the \numexpr (2*(#1)+(#2))/(2*(#2))-1 \relax }
+
+%% Floor of a fixed-point value to a whole integer (i.e. the map cell).
+%% \dtexFloorDiv is valid only for a positive numerator, so shift by a
+%% multiple of 1024 first and subtract it back off; correct for values
+%% down to -1048576, far beyond any coordinate the game produces.
+\cs_new:Npn \dtexFloor #1
+  { \the \numexpr \dtexFloorDiv { (#1)+1048576 } {1024} - 1024 \relax }
+
+%% Fractional part of a fixed-point value, always in [0,1024).
+\cs_new:Npn \dtexFrac #1 { \the \numexpr (#1)-\dtexFloor {#1} *1024 \relax }
+
+\cs_new:Npn \dtexAbs #1 { \the \numexpr \int_compare:nNnTF {#1} < {0} {0-(#1)} {#1} \relax }
+
+%% Shared scratch registers for world-relative offsets, used by the
+%% raycaster, the sprite projector, the sound panner and the game logic.
+\int_new:N \l_dtex_relx_int
+\int_new:N \l_dtex_rely_int
+
+\cs_new:Npn \dtexMin #1#2 { \the \numexpr \int_compare:nNnTF {#1} < {#2} {#1} {#2} \relax }
+\cs_new:Npn \dtexMax #1#2 { \the \numexpr \int_compare:nNnTF {#1} > {#2} {#1} {#2} \relax }
+\cs_new:Npn \dtexClamp #1#2#3 % value, lo, hi
+  { \the \numexpr \int_compare:nNnTF {#1} < {#2} {#2}
+      { \int_compare:nNnTF {#1} > {#3} {#3} {#1} } \relax }
+
+%% ------------------------------------------------------------------
+%% Fixed-point multiply and divide.
+%% ------------------------------------------------------------------
+
+%% Fast multiply.  Requires |a*b| < 2^31, i.e. roughly |a|*|b| < 2.1e9.
+%% Safe for the raycaster's inner loop where both operands stay small.
+\cs_new:Npn \dtexMul #1#2 { \the \numexpr (#1)*(#2)/1024 \relax }
+
+%% Safe multiply via operand splitting.  Handles a up to 2^31 and b up to
+%% ~2e6 without overflow.  Sign-correct (verified in spikes/s2mul.tex).
+\cs_new:Npn \dtexMulS #1#2
+  { \the \numexpr ((#1)/1024)*(#2) + (((#1)-((#1)/1024)*1024)*(#2))/1024 \relax }
+
+%% Fixed-point divide.  Requires |a| < 2.1e6.
+\cs_new:Npn \dtexDiv #1#2 { \the \numexpr (#1)*1024/(#2) \relax }
+
+%% Safe fixed-point divide for large numerators: splits the shift.
+\cs_new:Npn \dtexDivS #1#2
+  { \the \numexpr ((#1)/(#2))*1024 + (((#1)-((#1)/(#2))*(#2))*1024)/(#2) \relax }
+
+%% ------------------------------------------------------------------
+%% Integer square root (fixed-point in, fixed-point out).
+%% Newton's method; not expandable, used only for sound distances.
+%% ------------------------------------------------------------------
+\int_new:N \l_dtex_sqrt_x_int
+\int_new:N \l_dtex_sqrt_g_int
+\int_new:N \l_dtex_sqrt_n_int
+
+\cs_new_protected:Npn \dtexSqrtSet #1#2 % #1 = result int var, #2 = fixed value
+  {
+    \int_set:Nn \l_dtex_sqrt_x_int {#2}
+    \int_compare:nNnTF { \l_dtex_sqrt_x_int } < {1}
+      { \int_set:Nn #1 {0} }
+      {
+        % sqrt(v/1024)*1024 = sqrt(v*1024).  Split to dodge overflow.
+        \int_set:Nn \l_dtex_sqrt_g_int { \l_dtex_sqrt_x_int }
+        \int_compare:nNnT { \l_dtex_sqrt_g_int } < {1024} { \int_set:Nn \l_dtex_sqrt_g_int {1024} }
+        \int_step_inline:nnn {1} {12}
+          {
+            % g = (g + x*1024/g)/2 , with x*1024 computed safely
+            \int_set:Nn \l_dtex_sqrt_n_int
+              { ( \l_dtex_sqrt_g_int
+                  + ( (\l_dtex_sqrt_x_int/\l_dtex_sqrt_g_int)*1024
+                      + ((\l_dtex_sqrt_x_int-(\l_dtex_sqrt_x_int/\l_dtex_sqrt_g_int)
+                          *\l_dtex_sqrt_g_int)*1024)/\l_dtex_sqrt_g_int ) ) / 2 }
+            \int_set:Nn \l_dtex_sqrt_g_int { \l_dtex_sqrt_n_int }
+          }
+        \int_set:Nn #1 { \l_dtex_sqrt_g_int }
+      }
+  }
+
+%% ------------------------------------------------------------------
+%% Sine table.  257 entries covering 0..90 degrees, values 0..1024.
+%% Generated once by l3fp (itself pure TeX) and cached to disk; later
+%% runs just \input the table, so the cost is zero per frame.
+%% ------------------------------------------------------------------
+\iow_new:N \g_dtex_cache_iow
+
+\cs_new_protected:Npn \dtexSinEntry #1#2
+  { \cs_gset:cpn { dtex_sin_ \int_eval:n {#1} : } {#2} }
+
+\cs_new_protected:Npn \dtex_build_sintab:
+  {
+    \iow_open:Nn \g_dtex_cache_iow { cache/sintab.tex }
+    \iow_now:Nx \g_dtex_cache_iow { \c_percent_str \c_space_tl DoomTex~sine~table~--~generated~by~TeX,~do~not~edit }
+    \int_step_inline:nnn {0} {256}
+      {
+        \iow_now:Nx \g_dtex_cache_iow
+          { \c_backslash_str dtexSinEntry {##1}
+            { \fp_eval:n { round(1024*sind(90*##1/256)) } } }
+      }
+    \iow_close:N \g_dtex_cache_iow
+  }
+
+\cs_new_protected:Npn \dtexLoadSinTable:
+  {
+    \file_if_exist:nF { cache/sintab.tex } { \dtex_build_sintab: }
+    \file_input:n { cache/sintab.tex }
+  }
+
+%% Raw first-quadrant lookup, index 0..256.
+\cs_new:Npn \dtex_sintab:n #1 { \use:c { dtex_sin_ \int_eval:n {#1} : } }
+
+%% \dtexSin{a} / \dtexCos{a} for any angle; result is fixed-point -1024..1024.
+%% Returns a bare (possibly negative) integer -- ALWAYS parenthesise at the
+%% call site when embedding in \numexpr, e.g.  \numexpr 5*(\dtexSin{600}).
+\cs_new:Npn \dtexSin #1
+  {
+    \exp_args:Nf \dtex_sin_aux:n { \int_mod:nn { (#1)+1048576 } {1024} }
+  }
+\cs_new:Npn \dtex_sin_aux:n #1
+  {
+    \int_compare:nNnTF {#1} < {257}
+      { \dtex_sintab:n {#1} }
+      {
+        \int_compare:nNnTF {#1} < {513}
+          { \dtex_sintab:n { 512-(#1) } }
+          {
+            \int_compare:nNnTF {#1} < {769}
+              { -\dtex_sintab:n { (#1)-512 } }
+              { -\dtex_sintab:n { 1024-(#1) } }
+          }
+      }
+  }
+\cs_new:Npn \dtexCos #1 { \dtexSin { (#1)+256 } }
+
+\ExplSyntaxOff

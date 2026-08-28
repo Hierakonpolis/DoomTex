@@ -1,0 +1,23 @@
+\documentclass{article}
+\usepackage{expl3}
+\ExplSyntaxOn
+\cs_new:Npn \showint #1 { \int_eval:n {#1} }
+
+% --- test 1: does \numexpr round or truncate?
+\cs_new:Npn \rawdiv #1#2 { \the\numexpr #1/#2\relax }
+% --- candidate floor division for positive operands
+\cs_new:Npn \fdiv #1#2 { \the\numexpr (2*(#1)+(#2))/(2*(#2)) - 1\relax }
+
+\ExplSyntaxOff
+\begin{document}
+\ttfamily\small
+RAW (numexpr rounds?):\\
+5/2=\rawdiv{5}{2} \quad 4/2=\rawdiv{4}{2} \quad 7/2=\rawdiv{7}{2} \quad 1/2=\rawdiv{1}{2} \quad 3/4=\rawdiv{3}{4}\\[1ex]
+FLOORDIV candidate ((2a+b)/(2b)-1):\\
+5/2=\fdiv{5}{2}(want 2) \quad 4/2=\fdiv{4}{2}(want 2) \quad 6/2=\fdiv{6}{2}(want 3)\\
+7/2=\fdiv{7}{2}(want 3) \quad 1/2=\fdiv{1}{2}(want 0) \quad 0/2=\fdiv{0}{2}(want 0)\\
+9/4=\fdiv{9}{4}(want 2) \quad 8/4=\fdiv{8}{4}(want 2) \quad 11/4=\fdiv{11}{4}(want 2)\\
+12/4=\fdiv{12}{4}(want 3) \quad 1023/1024=\fdiv{1023}{1024}(want 0) \quad 1024/1024=\fdiv{1024}{1024}(want 1)\\
+2047/1024=\fdiv{2047}{1024}(want 1) \quad 2048/1024=\fdiv{2048}{1024}(want 2)\\
+12832/1024=\fdiv{12832}{1024}(want 12)\\
+\end{document}

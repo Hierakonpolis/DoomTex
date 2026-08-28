@@ -1,0 +1,59 @@
+%% ===================================================================
+%%  DoomTex -- one pdflatex run renders one frame of Doom.
+%%
+%%      input.txt  +  state.tex  ->  [ pdflatex doom.tex ]
+%%                                        ->  doom.pdf  +  state.tex
+%%
+%%  Run it again to advance one more frame.  Everything -- the fixed
+%%  point maths, the raycaster, the textures, the AI -- is TeX macro
+%%  expansion.  No Lua, no shell escape, no external tools.
+%%
+%%  See README.md.  For a keyboard-driven loop, use ./play.sh
+%% ===================================================================
+\documentclass{article}
+\usepackage[paperwidth=340bp,paperheight=326bp,margin=10bp]{geometry}
+\usepackage{doomtex}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+
+\begin{document}
+\ExplSyntaxOn
+
+%% ---- boot -------------------------------------------------------
+%% Both tables are computed by TeX on the first run and cached to disk,
+%% so every later frame pays nothing for them.
+\dtexLoadSinTable:
+\dtexLoadTextures:
+
+%% ---- read the player's intent, and the world as we left it ------
+\dtexReadInput
+\dtexLoadState
+
+%% ---- simulate exactly one tick ----------------------------------
+\dtexTick
+
+%% ---- render ------------------------------------------------------
+\dtexCastAll
+\vbox
+  {
+    \offinterlineskip
+    \dtexRenderAudio
+    \kern 6bp
+    %% The viewport: the column-stack frame, then the sprite overlay,
+    %% then the weapon, all layered at the same origin.
+    \hbox
+      {
+        \rlap { \dtexRenderFrame }
+        \rlap { \dtexDrawSprites }
+        \rlap { \dtexDrawWeapon }
+        \rlap { \dtexDamageTint }
+        \kern \dim_eval:n { \c_dtex_screen_w_int \c_dtex_px_dim }
+      }
+    \kern 8bp
+    \dtexRenderHUD
+  }
+
+%% ---- hand the world to the next run ------------------------------
+\dtexSaveState
+\ExplSyntaxOff
+\end{document}

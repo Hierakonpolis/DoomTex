@@ -1,0 +1,168 @@
+%% DoomTex :: engine/hud.tex
+%% The weapon in hand, and the status bar beneath the viewport.
+\ExplSyntaxOn
+
+\int_new:N \l_dtex_bobx_int \int_new:N \l_dtex_boby_int
+\int_new:N \l_dtex_wsz_int
+
+\int_const:Nn \c_dtex_weapon_size_int {76}
+
+%% ------------------------------------------------------------------
+%% The pistol.  It sways with the walk cycle, which is the cheapest
+%% possible way to make the frame feel like motion rather than a slideshow.
+%% ------------------------------------------------------------------
+\cs_new_protected:Npn \dtexDrawWeapon
+  {
+    \int_compare:nNnT { \dtexV{health} } > {0}
+      {
+        \int_set:Nn \l_dtex_wsz_int { \c_dtex_weapon_size_int }
+        % bob follows an 8-phase cycle: 0,1,2,3,2,1,0,-1 style sway
+        \int_set:Nn \l_dtex_bobx_int
+          { \dtexSin { \dtexV{bob} * 128 } * 5 / 1024 }
+        \int_set:Nn \l_dtex_boby_int
+          { \dtexAbs { \dtexSin { \dtexV{bob} * 128 } } * 4 / 1024 }
+
+        % muzzle flash sits just above the barrel, and only on the frame
+        % in which the shot was actually fired
+        \int_compare:nNnT { \dtexV{fired} } = {1}
+          {
+            % the barrel mouth sits about an eighth of the way down the
+            % sprite, so anchor the flash there rather than in mid-air
+            \dtexBlitSprite {6}
+              { \c_dtex_screen_w_int / 2 - 32 + \l_dtex_bobx_int }
+              { \c_dtex_screen_h_int - \l_dtex_wsz_int - 26
+                + \l_dtex_wsz_int / 8 + \l_dtex_boby_int }
+              {64} {0}
+          }
+
+        \dtexBlitSprite {5}
+          { \c_dtex_screen_w_int / 2 - \l_dtex_wsz_int / 2 + \l_dtex_bobx_int }
+          { \c_dtex_screen_h_int - \l_dtex_wsz_int + \l_dtex_boby_int }
+          { \l_dtex_wsz_int } {1}
+      }
+  }
+
+%% Damage indicator.  A PDF has no alpha blend to wash the whole screen
+%% red with, so a hit is signalled as a red border closing in around the
+%% viewport instead: readable at a glance and cheap to draw.
+\cs_new_protected:Npn \dtex_edge:nnnn #1#2#3#4 % x, top row, width, height
+  {
+    \rlap
+      {
+        \kern \dim_eval:n { \int_eval:n {#1} \c_dtex_px_dim }
+        \raisebox
+          { \dim_eval:n
+              { \int_eval:n { \c_dtex_screen_h_int - (#2) - (#4) } \c_dtex_px_dim } }
+          {
+            \textcolor{dtexC5L0}
+              { \vrule width \dim_eval:n { \int_eval:n {#3} \c_dtex_px_dim }
+                       height \dim_eval:n { \int_eval:n {#4} \c_dtex_px_dim }
+                       depth 0pt }
+          }
+      }
+  }
+
+\cs_new_protected:Npn \dtexDamageTint
+  {
+    \int_compare:nNnT { \dtexV{flash} } > {0}
+      {
+        \dtex_edge:nnnn {0} {0} { \c_dtex_screen_w_int } {5}
+        \dtex_edge:nnnn {0} { \c_dtex_screen_h_int - 5 } { \c_dtex_screen_w_int } {5}
+        \dtex_edge:nnnn {0} {0} {5} { \c_dtex_screen_h_int }
+        \dtex_edge:nnnn { \c_dtex_screen_w_int - 5 } {0} {5} { \c_dtex_screen_h_int }
+      }
+  }
+
+%% ------------------------------------------------------------------
+%% Status bar.
+%% ------------------------------------------------------------------
+
+%% One labelled readout: big number over a small caption.
+\cs_new_protected:Npn \dtexStat #1#2#3 % caption, value, colour
+  {
+    \vtop
+      {
+        \hbox { \textcolor {#3} { \fontsize{17}{17}\selectfont \bfseries #2 } }
+        \kern1bp
+        \hbox { \textcolor{dtexC8L0} { \fontsize{6}{6}\selectfont #1 } }
+      }
+  }
+
+%% The face gets grimmer as health drops -- the one piece of Doom's HUD
+%% everybody remembers.
+\cs_new_protected:Npn \dtexFaceBox
+  {
+    \vbox { \offinterlineskip
+      \int_step_inline:nnn {0} {11}
+        {
+          \hbox
+            {
+              \int_step_inline:nnn {0} {11}
+                {
+                  \textcolor { \dtexPC { \dtex_face_pix:nn {####1} {##1} } {0} }
+                    { \vrule width 2bp height 2bp depth 0pt }
+                }
+            }
+        }
+    }
+  }
+
+%% A 12x12 face, assembled from a few rules rather than stored as art.
+\cs_new:Npn \dtex_face_pix:nn #1#2 % u, v
+  {
+    \bool_lazy_any:nTF
+      {
+        { \int_compare_p:n { #2 < 1 } }
+        { \int_compare_p:n { #2 > 10 } }
+        { \int_compare_p:n { #1 < 1 } }
+        { \int_compare_p:n { #1 > 10 } }
+      }
+      { 0 }
+      {
+        \bool_lazy_and:nnTF                       % eyes
+          { \int_compare_p:n { #2 > 3 } } { \int_compare_p:n { #2 < 6 } }
+          {
+            \bool_lazy_any:nTF
+              {
+                { \int_compare_p:n { #1 = 3 } } { \int_compare_p:n { #1 = 4 } }
+                { \int_compare_p:n { #1 = 7 } } { \int_compare_p:n { #1 = 8 } }
+              }
+              { 0 } { \dtex_face_skin: }
+          }
+          {
+            \bool_lazy_and:nnTF                   % mouth
+              { \int_compare_p:n { #2 > 7 } } { \int_compare_p:n { #2 < 9 } }
+              {
+                \bool_lazy_and:nnTF
+                  { \int_compare_p:n { #1 > 2 } } { \int_compare_p:n { #1 < 9 } }
+                  { \int_compare:nNnTF { \dtexV{health} } > {40} {4} {0} }
+                  { \dtex_face_skin: }
+              }
+              { \dtex_face_skin: }
+          }
+      }
+  }
+
+%% Skin tone tracks how badly hurt the player is.
+\cs_new:Npn \dtex_face_skin:
+  {
+    \int_compare:nNnTF { \dtexV{health} } > {66} {3}
+      { \int_compare:nNnTF { \dtexV{health} } > {33} {2} {5} }
+  }
+
+\cs_new_protected:Npn \dtexRenderHUD
+  {
+    \hbox to \dim_eval:n { \c_dtex_screen_w_int \c_dtex_px_dim }
+      {
+        \ttfamily
+        \dtexStat {AMMO} { \dtexV{ammo} } {dtexC14L0} \hfill
+        \dtexStat {HEALTH} { \dtexV{health} \% }
+          { \int_compare:nNnTF { \dtexV{health} } > {33} {dtexC15L0} {dtexC5L0} } \hfill
+        \raisebox{-2bp}{\dtexFaceBox} \hfill
+        \dtexStat {ARMOR} { \dtexV{armor} \% } {dtexC12L0} \hfill
+        \dtexStat {KILLS} { \dtexV{kills} /3 } {dtexC9L0} \hfill
+        \dtexStat {FRAME} { \dtexV{frame} } {dtexC8L0}
+      }
+  }
+
+\ExplSyntaxOff

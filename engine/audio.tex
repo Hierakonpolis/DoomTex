@@ -1,0 +1,179 @@
+%% DoomTex :: engine/audio.tex
+%% The sound system.
+%%
+%% A PDF cannot make a noise, so DoomTex "plays" audio the only way it can:
+%% as text, in a fixed block directly above the viewport.  Volume and stereo
+%% pan are not decoration -- they are computed from the real distance and
+%% bearing between the player and the thing making the sound, so the meters
+%% tell you where something is even when you cannot see it.
+%%
+%% The block is always exactly the same height, whether three sounds are
+%% playing or none, so the frame never shifts on the page.
+\ExplSyntaxOn
+
+\int_new:N \g_dtex_nsnd_int
+\int_new:N \l_dtex_snd_i_int   \int_new:N \l_dtex_snd_j_int
+\int_new:N \l_dtex_sdist_int   \int_new:N \l_dtex_slat_int
+\int_new:N \l_dtex_vol_int     \int_new:N \l_dtex_pan_int
+
+\int_const:Nn \c_dtex_snd_slots_int {3}
+
+\cs_new_protected:Npn \dtexAudioReset { \int_gzero:N \g_dtex_nsnd_int }
+
+%% \dtexPlaySound {name} {volume 0-100} {pan -100..100}
+%% Keeps the loudest \c_dtex_snd_slots_int sounds, by insertion.
+\cs_new_protected:Npn \dtexPlaySound #1#2#3
+  {
+    \int_set:Nn \l_dtex_snd_i_int { \g_dtex_nsnd_int }
+    % walk down from the end, shifting quieter sounds along
+    \bool_while_do:nn
+      {
+        \bool_lazy_and_p:nn
+          { \int_compare_p:n { \l_dtex_snd_i_int > 0 } }
+          { \int_compare_p:n
+              { \use:c { dtex_snd_ \int_eval:n { \l_dtex_snd_i_int - 1 } _vol: } < (#2) } }
+      }
+      {
+        \int_compare:nNnT { \l_dtex_snd_i_int } < { \c_dtex_snd_slots_int }
+          {
+            \cs_gset_eq:cc { dtex_snd_ \int_use:N \l_dtex_snd_i_int _name: }
+                           { dtex_snd_ \int_eval:n { \l_dtex_snd_i_int - 1 } _name: }
+            \cs_gset_eq:cc { dtex_snd_ \int_use:N \l_dtex_snd_i_int _vol: }
+                           { dtex_snd_ \int_eval:n { \l_dtex_snd_i_int - 1 } _vol: }
+            \cs_gset_eq:cc { dtex_snd_ \int_use:N \l_dtex_snd_i_int _pan: }
+                           { dtex_snd_ \int_eval:n { \l_dtex_snd_i_int - 1 } _pan: }
+          }
+        \int_decr:N \l_dtex_snd_i_int
+      }
+    \int_compare:nNnT { \l_dtex_snd_i_int } < { \c_dtex_snd_slots_int }
+      {
+        \cs_gset:cpn { dtex_snd_ \int_use:N \l_dtex_snd_i_int _name: } {#1}
+        \cs_gset:cpx { dtex_snd_ \int_use:N \l_dtex_snd_i_int _vol: }
+          { \int_eval:n { \dtexClamp {#2} {0} {100} } }
+        \cs_gset:cpx { dtex_snd_ \int_use:N \l_dtex_snd_i_int _pan: }
+          { \int_eval:n { \dtexClamp {#3} {-100} {100} } }
+      }
+    \int_compare:nNnT { \g_dtex_nsnd_int } < { \c_dtex_snd_slots_int }
+      { \int_gincr:N \g_dtex_nsnd_int }
+  }
+
+%% \dtexPlaySoundAt {name} {world x} {world y} {base volume}
+%% Attenuates by distance and pans by bearing relative to where the player
+%% is looking.  Uses the camera's right-hand vector, so no trigonometry is
+%% needed beyond the dir/plane pair already computed for the frame.
+\cs_new_protected:Npn \dtexPlaySoundAt #1#2#3#4
+  {
+    \int_set:Nn \l_dtex_relx_int { (#2) - \dtexV{px} }
+    \int_set:Nn \l_dtex_rely_int { (#3) - \dtexV{py} }
+    \dtexSqrtSet \l_dtex_sdist_int
+      { ( \l_dtex_relx_int * \l_dtex_relx_int
+          + \l_dtex_rely_int * \l_dtex_rely_int ) / 1024 }
+    % lateral offset along the camera's right vector = perpendicular of dir
+    \int_set:Nn \l_dtex_slat_int
+      { ( 0 - \l_dtex_relx_int * \l_dtex_diry_int
+          + \l_dtex_rely_int * \l_dtex_dirx_int ) / 1024 }
+    \int_set:Nn \l_dtex_vol_int
+      { \dtexClamp { (#4) - \l_dtex_sdist_int * 6 / 1024 } {0} {100} }
+    \int_compare:nNnTF { \l_dtex_sdist_int } < {64}
+      { \int_zero:N \l_dtex_pan_int }
+      { \int_set:Nn \l_dtex_pan_int
+          { \dtexClamp { \l_dtex_slat_int * 100 / \l_dtex_sdist_int } {-100} {100} } }
+    \int_compare:nNnT { \l_dtex_vol_int } > {0}
+      { \dtexPlaySound {#1} { \l_dtex_vol_int } { \l_dtex_pan_int } }
+  }
+
+\cs_new:Npn \dtexSndName #1 { \cs_if_exist_use:cF { dtex_snd_ \int_eval:n {#1} _name: } {} }
+\cs_new:Npn \dtexSndVol  #1 { \cs_if_exist_use:cF { dtex_snd_ \int_eval:n {#1} _vol:  } {0} }
+\cs_new:Npn \dtexSndPan  #1 { \cs_if_exist_use:cF { dtex_snd_ \int_eval:n {#1} _pan:  } {0} }
+
+%% ------------------------------------------------------------------
+%% Drawing the block.  Meters are built from rules rather than glyphs, so
+%% nothing here depends on a font having block-drawing characters.
+%% ------------------------------------------------------------------
+%% Fixed height for the whole block.  This must NOT be derived from
+%% \baselineskip: the caller composes the page inside a \vbox that has
+%% already issued \offinterlineskip, which sets \baselineskip to -1000pt.
+\dim_const:Nn \c_dtex_audio_h_dim {52bp}
+\dim_const:Nn \c_dtex_meter_h_dim {4bp}
+\dim_const:Nn \c_dtex_meter_seg_dim {5bp}
+
+%% A segmented bar: #1 segments lit out of #2, in colour #3 (unlit #4).
+\cs_new_protected:Npn \dtexMeter #1#2#3#4
+  {
+    \int_step_inline:nnn {1} {#2}
+      {
+        \textcolor { \int_compare:nNnTF {##1} > {#1} {#4} {#3} }
+          { \vrule width \dim_eval:n { \c_dtex_meter_seg_dim - 1bp }
+                   height \c_dtex_meter_h_dim depth 0pt }
+        \kern 1bp
+      }
+  }
+
+%% A pan indicator: a marker sliding along a track from L to R.
+\cs_new_protected:Npn \dtexPanBar #1 % -100..100
+  {
+    \int_step_inline:nnn {0} {12}
+      {
+        \int_compare:nNnTF
+          { ##1 } = { \int_eval:n { ( (#1) + 100 ) * 12 / 200 } }
+          { \textcolor{dtexC15L0}
+              { \vrule width 3bp height \c_dtex_meter_h_dim depth 0pt } }
+          { \textcolor{dtexC7L2}
+              { \vrule width 3bp height 1bp depth 0pt } }
+        \kern 1bp
+      }
+  }
+
+%% Music.  The track is fixed per level; the beat counter advances with the
+%% frame number so the bar visibly moves from frame to frame.
+\cs_new_protected:Npn \dtexMusicLine
+  {
+    \textcolor{dtexC14L0}{\textbf{MUS}}\,
+    \textcolor{dtexC15L1}{"At~Doom's~Gate"}~
+    \textcolor{dtexC8L0}{\scriptsize (E1M1)}\hfill
+    \dtexMeter { \int_eval:n { \int_mod:nn { \dtexV{frame} } {8} + 1 } } {8}
+                {dtexC14L0} {dtexC7L1}
+    \kern4bp \textcolor{dtexC8L0}{\scriptsize
+      bar~\int_eval:n { \int_mod:nn { \dtexV{frame} } {32} + 1 } /32 }
+  }
+
+\cs_new:Npn \dtexMuted { (~no~sound~this~frame~) }
+
+\cs_new_protected:Npn \dtexSfxLine #1 % slot index
+  {
+    \int_compare:nNnTF {#1} < { \g_dtex_nsnd_int }
+      {
+        \textcolor{dtexC6L0}{\textbf{>}}~
+        \textcolor{dtexC15L0}{ \dtexSndName{#1} }\hfill
+        \textcolor{dtexC8L0}{\scriptsize vol}~
+        \dtexMeter { \int_eval:n { \dtexSndVol{#1} * 10 / 100 } } {10}
+                    {dtexC6L0} {dtexC7L1}
+        \kern6bp \textcolor{dtexC8L0}{\scriptsize L}~
+        \dtexPanBar { \dtexSndPan{#1} }
+        ~\textcolor{dtexC8L0}{\scriptsize R}
+      }
+      {
+        \textcolor{dtexC7L4}
+          { \int_compare:nNnTF {#1} = {0} { \dtexMuted } { \textperiodcentered } }
+        \hfill\strut
+      }
+  }
+
+\cs_new_protected:Npn \dtexRenderAudio
+  {
+    \vbox to \c_dtex_audio_h_dim
+      {
+        \hsize = \dim_eval:n { \c_dtex_screen_w_int \c_dtex_px_dim }
+        % restore sane interline spacing: the caller may have
+        % switched it off to stack the frame's rules exactly
+        \normalbaselines \baselineskip = 11bp
+        \ttfamily \footnotesize
+        \dtexMusicLine \par
+        \textcolor{dtexC7L2}{\rule{\hsize}{0.4bp}}\par
+        \int_step_inline:nnn {0} { \c_dtex_snd_slots_int - 1 }
+          { \dtexSfxLine {##1} \par }
+        \vfill
+      }
+  }
+
+\ExplSyntaxOff

@@ -1,0 +1,141 @@
+%% DoomTex :: engine/stateio.tex
+%% Persistence between frames, and reading the player's input file.
+%%
+%% state.tex is written by TeX at the end of every run as a flat list of
+%% explicit macro calls -- no parser required on the way back in, and the
+%% file stays readable and hand-editable.
+\ExplSyntaxOn
+
+\iow_new:N \g_dtex_state_iow
+
+%% ---------- scalar world state ----------
+%% \dtexS {key} {expr}  stores;  \dtexV {key}  reads (expandable).
+\cs_new_protected:Npn \dtexS #1#2
+  { \cs_gset:cpx { dtex_s_ #1 : } { \int_eval:n {#2} } }
+\cs_new:Npn \dtexV #1
+  { \cs_if_exist_use:cF { dtex_s_ #1 : } {0} }
+
+%% ---------- actors ----------
+%% type: 1=imp  2=medkit  3=ammoclip
+%% st:   0=idle 1=chase 2=attack 3=pain 4=dying 5=dead/gone
+\int_new:N \g_dtex_nent_int
+
+\cs_new_protected:Npn \dtexEntReset #1
+  { \int_gset:Nn \g_dtex_nent_int {#1} }
+
+\cs_new_protected:Npn \dtexE #1#2#3#4#5#6#7 % i type x y hp st timer
+  {
+    \cs_gset:cpx { dtex_e_ \int_eval:n {#1} _type: } { \int_eval:n {#2} }
+    \cs_gset:cpx { dtex_e_ \int_eval:n {#1} _x:    } { \int_eval:n {#3} }
+    \cs_gset:cpx { dtex_e_ \int_eval:n {#1} _y:    } { \int_eval:n {#4} }
+    \cs_gset:cpx { dtex_e_ \int_eval:n {#1} _hp:   } { \int_eval:n {#5} }
+    \cs_gset:cpx { dtex_e_ \int_eval:n {#1} _st:   } { \int_eval:n {#6} }
+    \cs_gset:cpx { dtex_e_ \int_eval:n {#1} _t:    } { \int_eval:n {#7} }
+  }
+
+%% \dtexEV {i} {field}  -- expandable actor field read
+\cs_new:Npn \dtexEV #1#2
+  { \cs_if_exist_use:cF { dtex_e_ \int_eval:n {#1} _ #2 : } {0} }
+%% \dtexES {i} {field} {expr} -- actor field write
+\cs_new_protected:Npn \dtexES #1#2#3
+  { \cs_gset:cpx { dtex_e_ \int_eval:n {#1} _ #2 : } { \int_eval:n {#3} } }
+
+%% ---------- pseudo-random numbers ----------
+%% Small LCG (period 65536) chosen so intermediates stay far below 2^31.
+\cs_new_protected:Npn \dtexRandStep:
+  { \dtexS {seed} { \int_mod:nn { \dtexV{seed} * 75 + 74 } {65537} } }
+\cs_new_protected:Npn \dtexRandSet #1#2 % result int var, modulus
+  {
+    \dtexRandStep:
+    \int_set:Nn #1 { \int_mod:nn { \dtexV{seed} } {#2} }
+  }
+
+%% ---------- a fresh game ----------
+\cs_new_protected:Npn \dtexNewGame
+  {
+    \dtexS {frame}  {0}
+    \dtexS {px}     { \c_dtex_spawn_x_int }
+    \dtexS {py}     { \c_dtex_spawn_y_int }
+    \dtexS {ang}    { \c_dtex_spawn_a_int }
+    \dtexS {health} {100}
+    \dtexS {armor}  {0}
+    \dtexS {ammo}   {50}
+    \dtexS {weapon} {1}
+    \dtexS {kills}  {0}
+    \dtexS {seed}   {12345}
+    \dtexS {flash}  {0}    % damage-flash countdown
+    \dtexS {fired}  {0}    % muzzle-flash flag for this frame
+    \dtexS {bob}    {0}    % view-bob phase
+    \dtexEntReset {5}
+    \dtexE {1} {1} {17408} {9216}  {60} {0} {0}   % imp in the pillared hall
+    \dtexE {2} {1} {19456} {13312} {60} {0} {0}   % imp, south of the pillars
+    \dtexE {3} {1} {6144}  {19456} {60} {0} {0}   % imp in the stone vault
+    \dtexE {4} {2} {2560}  {11264} {1}  {0} {0}   % medkit
+    \dtexE {5} {3} {12288} {4608}  {1}  {0} {0}   % ammo clip
+    \dtexSetDoor {18} {6} {1}                      % the one door starts shut
+  }
+
+%% ---------- load ----------
+\cs_new_protected:Npn \dtexLoadState
+  {
+    \file_if_exist:nTF { state.tex }
+      { \file_input:n { state.tex } }
+      { \dtexNewGame }
+  }
+
+%% ---------- save ----------
+%% Written only after state.tex has been fully consumed, so rewriting the
+%% file we just read is safe (verified in spikes/s6rt.tex).
+\cs_new_protected:Npn \dtexSaveState
+  {
+    \iow_open:Nn \g_dtex_state_iow { state.tex }
+    \iow_now:Nx \g_dtex_state_iow
+      { \c_percent_str \c_space_tl DoomTex~world~state~--~written~by~TeX~at~frame~ \dtexV{frame} }
+    \clist_map_inline:nn
+      { frame, px, py, ang, health, armor, ammo, weapon, kills, seed, flash, fired, bob }
+      { \iow_now:Nx \g_dtex_state_iow
+          { \c_backslash_str dtexS {##1} { \dtexV{##1} } } }
+    \iow_now:Nx \g_dtex_state_iow
+      { \c_backslash_str dtexEntReset { \int_use:N \g_dtex_nent_int } }
+    \int_step_inline:nnn {1} { \g_dtex_nent_int }
+      {
+        \iow_now:Nx \g_dtex_state_iow
+          { \c_backslash_str dtexE {##1}
+            { \dtexEV{##1}{type} } { \dtexEV{##1}{x} } { \dtexEV{##1}{y} }
+            { \dtexEV{##1}{hp} }   { \dtexEV{##1}{st} } { \dtexEV{##1}{t} } }
+      }
+    \iow_now:Nx \g_dtex_state_iow
+      { \c_backslash_str dtexSetDoor {18} {6} { \dtexDoorOpen {18} {6} } }
+    \iow_close:N \g_dtex_state_iow
+  }
+
+%% ---------- the player's input for this frame ----------
+%% input.txt is plain text: whitespace-separated action words on any number
+%% of lines.  Read as a str so no character in it can be misinterpreted.
+\ior_new:N \g_dtex_input_ior
+\seq_new:N \l_dtex_words_seq
+
+\cs_new:Npn \dtexIn #1 { \cs_if_exist_use:cF { dtex_in_ #1 : } {0} }
+
+\cs_new_protected:Npn \dtexReadInput
+  {
+    \clist_map_inline:nn
+      { forward, back, left, right, strafeleft, straferight, fire, use, run }
+      { \cs_gset:cpn { dtex_in_ ##1 : } {0} }
+    \file_if_exist:nT { input.txt }
+      {
+        \ior_open:Nn \g_dtex_input_ior { input.txt }
+        \ior_str_map_inline:Nn \g_dtex_input_ior
+          {
+            \seq_set_split:Nnn \l_dtex_words_seq { ~ } {##1}
+            \seq_map_inline:Nn \l_dtex_words_seq
+              {
+                \tl_if_blank:nF {####1}
+                  { \cs_gset:cpn { dtex_in_ ####1 : } {1} }
+              }
+          }
+        \ior_close:N \g_dtex_input_ior
+      }
+  }
+
+\ExplSyntaxOff

@@ -1,0 +1,21 @@
+\documentclass{article}
+\usepackage[paperwidth=200bp,paperheight=120bp,margin=0bp]{geometry}
+\usepackage{xcolor}
+\usepackage{expl3}
+\pagestyle{empty}
+\definecolor{ca}{RGB}{200,40,40}
+\definecolor{cb}{RGB}{40,40,200}
+\ExplSyntaxOn
+\dim_new:N \g_px_dim \dim_gset:Nn \g_px_dim {1bp}
+% integer heights that sum exactly: 8 segs of 15px = 120px
+\cs_new_protected:Npn \col
+  {
+    \vbox { \offinterlineskip
+      \int_step_inline:nnn {0} {7}
+        { \hbox { \textcolor { \int_if_even:nTF {##1} {ca} {cb} }
+            { \vrule width \g_px_dim height 15 \g_px_dim depth 0pt } } } }
+  }
+\ExplSyntaxOff
+\begin{document}\noindent
+\hbox{\ExplSyntaxOn\int_step_inline:nnn{0}{199}{\col}\ExplSyntaxOff}
+\end{document}

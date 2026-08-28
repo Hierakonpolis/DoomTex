@@ -1,0 +1,29 @@
+\documentclass{article}
+\usepackage[paperwidth=330bp,paperheight=210bp,margin=5bp]{geometry}
+\usepackage{xcolor}
+\usepackage{expl3}
+\pagestyle{empty}
+\ExplSyntaxOn
+\dim_new:N \g_px_dim
+\dim_gset:Nn \g_px_dim {1bp}
+
+% one column: stack of coloured rules, exact abutting
+\cs_new_protected:Npn \colstack #1 % #1 = column index
+  {
+    \vbox {
+      \offinterlineskip
+      \int_step_inline:nnn {0} {15}
+        {
+          \hbox { \textcolor [rgb] { \fp_eval:n {(##1)/15} , \fp_eval:n {(#1)/319} , 0.4 }
+                  { \vrule width \g_px_dim height \dim_eval:n {12.5 \g_px_dim} depth 0pt } }
+        }
+    }
+  }
+\cs_new_protected:Npn \drawframe
+  {
+    \hbox { \int_step_inline:nnn {0} {319} { \colstack {##1} } }
+  }
+\ExplSyntaxOff
+\begin{document}\noindent
+\drawframe
+\end{document}

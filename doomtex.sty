@@ -1,0 +1,25 @@
+%% DoomTex -- Doom rendered by TeX macro expansion.
+%% One pdflatex run = one frame.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{doomtex}[2026/08/28 DoomTex engine]
+\RequirePackage{expl3}
+\RequirePackage{xcolor}
+\ExplSyntaxOn
+%% Screen geometry, in DoomTex pixels.
+\int_const:Nn \c_dtex_screen_w_int  {320}
+\int_const:Nn \c_dtex_screen_h_int  {200}
+\int_const:Nn \c_dtex_horizon_int   {100}
+%% Physical size of one DoomTex pixel.
+\dim_const:Nn \c_dtex_px_dim {1bp}
+\ExplSyntaxOff
+\input{engine/fixed.tex}
+\input{engine/map.tex}
+\input{engine/stateio.tex}
+\input{engine/palette.tex}
+\input{engine/textures.tex}
+\input{engine/raycast.tex}
+\input{engine/sprites.tex}
+\input{engine/render.tex}
+\input{engine/audio.tex}
+\input{engine/hud.tex}
+\input{engine/logic.tex}

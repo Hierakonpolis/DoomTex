@@ -1,0 +1,28 @@
+\documentclass{article}
+\usepackage{expl3}\usepackage{xkeyval}
+\makeatletter
+\newwrite\statefile
+\ExplSyntaxOn
+\int_new:N \g_frame_int  \int_new:N \g_px_int
+\cs_new_protected:Npn \LoadState #1 { \keyval_parse:nnn
+   { } { \use:n { \StateKV } } {#1} }
+\cs_new_protected:Npn \StateKV #1#2
+  { \str_case:nnF {#1}
+      { {frame}{\int_gset:Nn \g_frame_int {#2}}
+        {px}   {\int_gset:Nn \g_px_int    {#2}} } { } }
+\ExplSyntaxOff
+\makeatother
+\begin{document}
+\ExplSyntaxOn
+\IfFileExists{rtstate.tex}{\input{rtstate.tex}}
+  {\int_gset:Nn \g_frame_int {0} \int_gset:Nn \g_px_int {12832}}
+% simulate a tick
+\int_gincr:N \g_frame_int
+\int_gadd:Nn \g_px_int {137}
+frame~=~\int_use:N \g_frame_int, ~px~=~\int_use:N \g_px_int
+% write next state AFTER input is consumed
+\immediate\openout\statefile=rtstate.tex
+\immediate\write\statefile{\string\LoadState{frame=\int_use:N \g_frame_int,px=\int_use:N \g_px_int}}
+\immediate\closeout\statefile
+\ExplSyntaxOff
+\end{document}

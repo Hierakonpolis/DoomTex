@@ -1,0 +1,24 @@
+\documentclass{article}
+\usepackage{expl3}
+\makeatletter
+% floor division, positive operands
+\def\fdiv#1#2{\the\numexpr (2*(#1)+(#2))/(2*(#2)) - 1\relax}
+% fast multiply: assumes |a*b| < 2^31
+\def\mulF#1#2{\the\numexpr (#1)*(#2)/1024\relax}
+% safe split multiply, unsigned magnitudes
+\def\mulU#1#2{\the\numexpr ((#1)/1024)*(#2) + (((#1)-((#1)/1024)*1024)*(#2))/1024\relax}
+\makeatother
+\begin{document}
+\ttfamily\small\raggedright
+mulF 2048*1024/1024: \mulF{2048}{1024} (want 2048)\\
+mulF 1536*1536: \mulF{1536}{1536} (want 2304)\\
+mulF -1536*1536: \mulF{-1536}{1536} (want -2304)\\
+mulF 1536*-1536: \mulF{1536}{-1536} (want -2304)\\[1ex]
+mulU 2048*1024: \mulU{2048}{1024} (want 2048)\\
+mulU 1536*1536: \mulU{1536}{1536} (want 2304)\\
+mulU 65536*32768: \mulU{65536}{32768} (want 2097152)\\
+mulU 1048576*2048: \mulU{1048576}{2048} (want 2097152)\\
+mulU 12832*9216: \mulU{12832}{9216} (want 115488)\\
+mulU 1023*1023: \mulU{1023}{1023} (want 1021 approx)\\
+mulU -1536*1536: \mulU{-1536}{1536} (want -2304)\\
+\end{document}

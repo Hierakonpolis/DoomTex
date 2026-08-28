@@ -1,0 +1,69 @@
+%% DoomTex :: engine/palette.tex
+%% A 16-entry base palette, each entry pre-shaded into 8 light levels, so
+%% that distance shading during rendering costs a hash lookup rather than
+%% any arithmetic.  128 colours are defined once per run.
+%%   level 0 = fully lit,  level 7 = deepest shadow.
+\ExplSyntaxOn
+
+\int_new:N \l_dtex_pal_r_int \int_new:N \l_dtex_pal_g_int \int_new:N \l_dtex_pal_b_int
+
+%% Light multipliers, out of 256.  A gentle curve: nearby surfaces stay
+%% bright and the falloff steepens with distance.
+\clist_const:Nn \c_dtex_shade_clist {256,232,210,189,170,152,136,121}
+
+\cs_new_protected:Npn \dtexPalEntry #1#2#3#4 % index, r, g, b
+  {
+    \int_step_inline:nnn {0} {7}
+      {
+        \int_set:Nn \l_dtex_pal_r_int
+          { (#2) * \clist_item:Nn \c_dtex_shade_clist { ##1 + 1 } / 256 }
+        \int_set:Nn \l_dtex_pal_g_int
+          { (#3) * \clist_item:Nn \c_dtex_shade_clist { ##1 + 1 } / 256 }
+        \int_set:Nn \l_dtex_pal_b_int
+          { (#4) * \clist_item:Nn \c_dtex_shade_clist { ##1 + 1 } / 256 }
+        \definecolor { dtexC #1 L ##1 } {RGB}
+          { \int_use:N \l_dtex_pal_r_int , \int_use:N \l_dtex_pal_g_int ,
+            \int_use:N \l_dtex_pal_b_int }
+      }
+  }
+
+%%                idx   r    g    b
+\dtexPalEntry {0}  {  8} {  8} { 10}   % void black
+\dtexPalEntry {1}  { 60} { 52} { 44}   % dark mortar brown
+\dtexPalEntry {2}  {110} { 88} { 66}   % mid brown
+\dtexPalEntry {3}  {168} {140} {104}   % light tan
+\dtexPalEntry {4}  {104} { 30} { 26}   % dark red
+\dtexPalEntry {5}  {160} { 52} { 40}   % brick red
+\dtexPalEntry {6}  {206} { 96} { 52}   % hot orange
+\dtexPalEntry {7}  { 62} { 64} { 70}   % dark grey
+\dtexPalEntry {8}  { 94} { 98} {102}   % mid grey
+\dtexPalEntry {9}  {148} {152} {156}   % light grey
+\dtexPalEntry {10} { 40} { 54} { 74}   % dark steel blue
+\dtexPalEntry {11} { 70} { 98} {138}   % steel blue
+\dtexPalEntry {12} {118} {154} {198}   % bright blue
+\dtexPalEntry {13} { 44} { 68} { 44}   % dark green
+\dtexPalEntry {14} {172} {142} { 52}   % brass / hazard yellow
+\dtexPalEntry {15} {212} {212} {204}   % near white
+
+%% \dtexPC {palette index} {level}  ->  the colour name
+\cs_new:Npn \dtexPC #1#2
+  { dtexC \int_eval:n {#1} L \int_eval:n { \dtexClamp {#2} {0} {7} } }
+
+%% ------------------------------------------------------------------
+%% Floor and ceiling gradient.  The screen is banded by row so the
+%% gradient is global and consistent across every column.
+%% Ceiling: brightest at the top of the screen, darkening to the horizon.
+%% Floor:   brightest at the bottom, darkening to the horizon.
+%% Band k covers 1/8 of the half-screen and uses light level k.
+%% ------------------------------------------------------------------
+\cs_new:Npn \dtexCeilLo #1 { \int_eval:n { (#1) * \c_dtex_horizon_int / 8 } }
+\cs_new:Npn \dtexCeilHi #1 { \int_eval:n { ((#1)+1) * \c_dtex_horizon_int / 8 } }
+\cs_new:Npn \dtexFloorLo #1
+  { \int_eval:n { \c_dtex_screen_h_int - ((#1)+1) * \c_dtex_horizon_int / 8 } }
+\cs_new:Npn \dtexFloorHi #1
+  { \int_eval:n { \c_dtex_screen_h_int - (#1) * \c_dtex_horizon_int / 8 } }
+
+\int_const:Nn \c_dtex_ceil_pal_int  {7}   % dark grey ceiling
+\int_const:Nn \c_dtex_floor_pal_int {2}   % brown floor
+
+\ExplSyntaxOff

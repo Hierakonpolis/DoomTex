@@ -1,0 +1,27 @@
+\documentclass{article}
+\usepackage{expl3}
+\input{../engine/fixed.tex}
+\ExplSyntaxOn
+\dtexLoadSinTable:
+\ExplSyntaxOff
+\begin{document}\ttfamily\small\raggedright
+FLOOR: \dtexFloor{12832}(w 12) \dtexFloor{1023}(w 0) \dtexFloor{-1}(w -1) \dtexFloor{-1024}(w -1)\\
+FRAC:  \dtexFrac{12832}(w 544) \dtexFrac{1024}(w 0) \dtexFrac{-1}(w 1023)\\
+ABS:   \dtexAbs{-77}(w 77) \dtexAbs{77}(w 77)\quad
+CLAMP: \dtexClamp{500}{0}{100}(w 100) \dtexClamp{-5}{0}{100}(w 0)\\
+MUL:   \dtexMul{1536}{1536}(w 2304)\quad MULS: \dtexMulS{65536}{32768}(w 2097152)\\
+DIV:   \dtexDiv{1024}{2048}(w 512)\quad \dtexDiv{3072}{1024}(w 3072)\\
+SIN:   0=\dtexSin{0}(w 0)\quad 128=\dtexSin{128}(w 724)\quad 256=\dtexSin{256}(w 1024)\\
+\phantom{SIN:} 384=\dtexSin{384}(w 724)\quad 512=\dtexSin{512}(w 0)\quad 640=\dtexSin{640}(w -724)\\
+\phantom{SIN:} 768=\dtexSin{768}(w -1024)\quad 896=\dtexSin{896}(w -724)\quad 1024=\dtexSin{1024}(w 0)\\
+\phantom{SIN:} -256=\dtexSin{-256}(w -1024)\quad 1280=\dtexSin{1280}(w 1024)\\
+COS:   0=\dtexCos{0}(w 1024)\quad 256=\dtexCos{256}(w 0)\quad 512=\dtexCos{512}(w -1024)\\
+IDENTITY sin^2+cos^2 at a=100: \the\numexpr (\dtexSin{100})*(\dtexSin{100})/1024 + (\dtexCos{100})*(\dtexCos{100})/1024\relax (w 1024)\\
+\ExplSyntaxOn
+\int_new:N \l_r_int
+\dtexSqrtSet \l_r_int {4096}  SQRT(4.0)=\int_use:N \l_r_int ~(w~2048)\\
+\dtexSqrtSet \l_r_int {2048}  SQRT(2.0)=\int_use:N \l_r_int ~(w~1448)\\
+\dtexSqrtSet \l_r_int {1024}  SQRT(1.0)=\int_use:N \l_r_int ~(w~1024)\\
+\dtexSqrtSet \l_r_int {102400} SQRT(100.0)=\int_use:N \l_r_int ~(w~10240)\\
+\ExplSyntaxOff
+\end{document}

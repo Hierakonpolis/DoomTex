@@ -1,0 +1,83 @@
+%% DoomTex :: engine/map.tex
+%% Level geometry.  24x24 grid, one digit per cell:
+%%   0 = empty floor      1 = brick wall     2 = tech panel
+%%   3 = stone wall       4 = door           5 = exit switch
+%% Cells are expanded into control sequences at load time so that the
+%% raycaster's cell lookup is a hash probe, not a string walk.
+\ExplSyntaxOn
+
+\int_const:Nn \c_dtex_map_w_int {24}
+\int_const:Nn \c_dtex_map_h_int {24}
+
+\int_new:N \l_dtex_row_x_int
+
+%% \dtexMapRow {y} {24 digits}
+\cs_new_protected:Npn \dtexMapRow #1#2
+  {
+    \int_zero:N \l_dtex_row_x_int
+    \tl_map_inline:nn {#2}
+      {
+        \cs_gset:cpn { dtex_cell_ \int_use:N \l_dtex_row_x_int _ \int_eval:n {#1} : } {##1}
+        \int_incr:N \l_dtex_row_x_int
+      }
+  }
+
+%% Expandable cell lookup.  Anything off-grid reads as solid brick so the
+%% raycaster can never walk off the edge of the world.
+\cs_new:Npn \dtexCell #1#2
+  {
+    \cs_if_exist_use:cF { dtex_cell_ \int_eval:n {#1} _ \int_eval:n {#2} : } {1}
+  }
+
+%% ------------------------------------------------------------------
+%% The level.  Start room (west), corridor, pillared hall (east),
+%% and a stone vault behind a door.
+%% ------------------------------------------------------------------
+\dtexMapRow {0}  {222222222222222222222222}
+\dtexMapRow {1}  {200000000000002000000002}
+\dtexMapRow {2}  {200000000000002000000002}
+\dtexMapRow {3}  {200011100000002000000002}
+\dtexMapRow {4}  {200010000000000000000002}
+\dtexMapRow {5}  {200010000000002000000002}
+\dtexMapRow {6}  {200011100000002222422222}
+\dtexMapRow {7}  {200000000000000000000002}
+\dtexMapRow {8}  {222222222200000000000002}
+\dtexMapRow {9}  {200000000000000000000002}
+\dtexMapRow {10} {200000000000000330000002}
+\dtexMapRow {11} {200000000000000330000002}
+\dtexMapRow {12} {200000000000000000000002}
+\dtexMapRow {13} {200000000000000000000002}
+\dtexMapRow {14} {200000000000000330000002}
+\dtexMapRow {15} {222222222200000330000002}
+\dtexMapRow {16} {200000000000000000000002}
+\dtexMapRow {17} {200000000000000000000002}
+\dtexMapRow {18} {200003330000000000000002}
+\dtexMapRow {19} {200000030000002222222222}
+\dtexMapRow {20} {200000030000002000000002}
+\dtexMapRow {21} {200003330000002000000002}
+\dtexMapRow {22} {200000000000000000000002}
+\dtexMapRow {23} {222222222222222222222222}
+
+%% A cell is solid unless it is empty floor, or a door that stands open.
+\cs_new:Npn \dtexSolid #1#2
+  {
+    \int_case:nnF { \dtexCell {#1} {#2} }
+      { {0} {0} {4} { \dtexDoorOpen {#1} {#2} } } {1}
+  }
+
+%% Doors are keyed by cell.  \dtexDoorOpen expands to 0 when open (i.e. not
+%% solid) and 1 when shut.  Door state is carried in state.tex.
+\cs_new:Npn \dtexDoorOpen #1#2
+  { \cs_if_exist_use:cF { dtex_door_ \int_eval:n {#1} _ \int_eval:n {#2} : } {1} }
+
+\cs_new_protected:Npn \dtexSetDoor #1#2#3 % x, y, 0=open 1=shut
+  { \cs_gset:cpn { dtex_door_ \int_eval:n {#1} _ \int_eval:n {#2} : } {#3} }
+
+%% Player spawn and initial actors, used by \dtexNewGame.
+%% Centre of the great hall, facing east down the avenue between the
+%% two pillar blocks -- a view with actual depth in it.
+\int_const:Nn \c_dtex_spawn_x_int { 10752 }  % 10.5
+\int_const:Nn \c_dtex_spawn_y_int { 12800 }  % 12.5
+\int_const:Nn \c_dtex_spawn_a_int { 0 }      % facing +x (east)
+
+\ExplSyntaxOff

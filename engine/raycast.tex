@@ -1,0 +1,162 @@
+%% DoomTex :: engine/raycast.tex
+%% Per-column DDA raycaster.  All integer fixed-point; no floating point,
+%% no l3fp anywhere in this file -- it runs 320 times per frame.
+%%
+%% Results are written into the column buffer as control sequences:
+%%   dtex_z_<x>:   perpendicular wall distance (fixed point)
+%%   dtex_w_<x>:   wall texture id (the map digit that was hit)
+%%   dtex_u_<x>:   texture column, 0..31
+%%   dtex_s_side_<x>: 0 = vertical (E/W) face, 1 = horizontal (N/S) face
+\ExplSyntaxOn
+
+\int_new:N \l_dtex_dirx_int   \int_new:N \l_dtex_diry_int
+\int_new:N \l_dtex_plx_int    \int_new:N \l_dtex_ply_int
+\int_new:N \l_dtex_rdx_int    \int_new:N \l_dtex_rdy_int
+\int_new:N \l_dtex_mapx_int   \int_new:N \l_dtex_mapy_int
+\int_new:N \l_dtex_ddx_int    \int_new:N \l_dtex_ddy_int
+\int_new:N \l_dtex_sdx_int    \int_new:N \l_dtex_sdy_int
+\int_new:N \l_dtex_stepx_int  \int_new:N \l_dtex_stepy_int
+\int_new:N \l_dtex_side_int   \int_new:N \l_dtex_hit_int
+\int_new:N \l_dtex_steps_int  \int_new:N \l_dtex_camx_int
+\int_new:N \l_dtex_dist_int   \int_new:N \l_dtex_wallx_int
+\int_new:N \l_dtex_cellv_int
+
+%% Camera plane half-width = tan(fov/2).  0.66 -> 66 degree field of view.
+\int_const:Nn \c_dtex_fov_int {676}
+%% Largest meaningful delta-distance: the value reached when a ray direction
+%% component is +-1, i.e. 1024*1024.  Clamping here keeps the sideDist
+%% products below 2^31 (1023 * 1048576 = 1.07e9).
+\int_const:Nn \c_dtex_maxdelta_int {1048576}
+
+%% Set the view vectors from the player's angle.  Called once per frame.
+\cs_new_protected:Npn \dtexSetCamera
+  {
+    \int_set:Nn \l_dtex_dirx_int { \dtexCos { \dtexV{ang} } }
+    \int_set:Nn \l_dtex_diry_int { \dtexSin { \dtexV{ang} } }
+    % plane = perpendicular to dir, scaled by the field of view
+    \int_set:Nn \l_dtex_plx_int { 0-( \l_dtex_diry_int * \c_dtex_fov_int / 1024 ) }
+    \int_set:Nn \l_dtex_ply_int {    \l_dtex_dirx_int * \c_dtex_fov_int / 1024   }
+  }
+
+%% One DDA step.  Advance along whichever axis has the nearer next gridline.
+\cs_new_protected:Npn \dtex_dda_step:
+  {
+    \int_compare:nNnTF { \l_dtex_sdx_int } < { \l_dtex_sdy_int }
+      {
+        \int_add:Nn \l_dtex_sdx_int { \l_dtex_ddx_int }
+        \int_add:Nn \l_dtex_mapx_int { \l_dtex_stepx_int }
+        \int_set:Nn \l_dtex_side_int {0}
+      }
+      {
+        \int_add:Nn \l_dtex_sdy_int { \l_dtex_ddy_int }
+        \int_add:Nn \l_dtex_mapy_int { \l_dtex_stepy_int }
+        \int_set:Nn \l_dtex_side_int {1}
+      }
+    \int_incr:N \l_dtex_steps_int
+    \int_set:Nn \l_dtex_cellv_int { \dtexSolid { \l_dtex_mapx_int } { \l_dtex_mapy_int } }
+    \int_compare:nNnT { \l_dtex_cellv_int } > {0} { \int_set:Nn \l_dtex_hit_int {1} }
+  }
+
+\cs_new_protected:Npn \dtex_dda_loop:
+  {
+    \bool_lazy_and:nnT
+      { \int_compare_p:n { \l_dtex_hit_int = 0 } }
+      { \int_compare_p:n { \l_dtex_steps_int < 64 } }
+      { \dtex_dda_step: \dtex_dda_loop: }
+  }
+
+%% Cast the ray for screen column #1 and store the result.
+\cs_new_protected:Npn \dtexCastColumn #1
+  {
+    % cameraX in [-1024, +1024) across the screen
+    \int_set:Nn \l_dtex_camx_int { 2*1024*(#1) / \c_dtex_screen_w_int - 1024 }
+    \int_set:Nn \l_dtex_rdx_int
+      { \l_dtex_dirx_int + \l_dtex_plx_int * \l_dtex_camx_int / 1024 }
+    \int_set:Nn \l_dtex_rdy_int
+      { \l_dtex_diry_int + \l_dtex_ply_int * \l_dtex_camx_int / 1024 }
+
+    \int_set:Nn \l_dtex_mapx_int { \dtexFloor { \dtexV{px} } }
+    \int_set:Nn \l_dtex_mapy_int { \dtexFloor { \dtexV{py} } }
+
+    % delta distances, guarding against a zero direction component
+    \int_compare:nNnTF { \l_dtex_rdx_int } = {0}
+      { \int_set:Nn \l_dtex_ddx_int { \c_dtex_maxdelta_int } }
+      { \int_set:Nn \l_dtex_ddx_int
+          { \dtexMin { 1048576 / \dtexAbs{\l_dtex_rdx_int} } { \c_dtex_maxdelta_int } } }
+    \int_compare:nNnTF { \l_dtex_rdy_int } = {0}
+      { \int_set:Nn \l_dtex_ddy_int { \c_dtex_maxdelta_int } }
+      { \int_set:Nn \l_dtex_ddy_int
+          { \dtexMin { 1048576 / \dtexAbs{\l_dtex_rdy_int} } { \c_dtex_maxdelta_int } } }
+
+    % step direction and distance to the first gridline on each axis
+    \int_compare:nNnTF { \l_dtex_rdx_int } < {0}
+      {
+        \int_set:Nn \l_dtex_stepx_int {-1}
+        \int_set:Nn \l_dtex_sdx_int
+          { \dtexMulS { \dtexFrac{\dtexV{px}} } { \l_dtex_ddx_int } }
+      }
+      {
+        \int_set:Nn \l_dtex_stepx_int {1}
+        \int_set:Nn \l_dtex_sdx_int
+          { \dtexMulS { 1024 - \dtexFrac{\dtexV{px}} } { \l_dtex_ddx_int } }
+      }
+    \int_compare:nNnTF { \l_dtex_rdy_int } < {0}
+      {
+        \int_set:Nn \l_dtex_stepy_int {-1}
+        \int_set:Nn \l_dtex_sdy_int
+          { \dtexMulS { \dtexFrac{\dtexV{py}} } { \l_dtex_ddy_int } }
+      }
+      {
+        \int_set:Nn \l_dtex_stepy_int {1}
+        \int_set:Nn \l_dtex_sdy_int
+          { \dtexMulS { 1024 - \dtexFrac{\dtexV{py}} } { \l_dtex_ddy_int } }
+      }
+
+    \int_zero:N \l_dtex_hit_int
+    \int_zero:N \l_dtex_steps_int
+    \int_zero:N \l_dtex_side_int
+    \dtex_dda_loop:
+
+    % perpendicular distance = the side distance minus the last step taken.
+    % Using the accumulated side distance avoids a second division and is
+    % automatically fish-eye corrected.
+    \int_compare:nNnTF { \l_dtex_side_int } = {0}
+      { \int_set:Nn \l_dtex_dist_int { \l_dtex_sdx_int - \l_dtex_ddx_int } }
+      { \int_set:Nn \l_dtex_dist_int { \l_dtex_sdy_int - \l_dtex_ddy_int } }
+    \int_compare:nNnT { \l_dtex_dist_int } < {64} { \int_set:Nn \l_dtex_dist_int {64} }
+
+    % where along the wall face the ray landed -> texture column
+    \int_compare:nNnTF { \l_dtex_side_int } = {0}
+      { \int_set:Nn \l_dtex_wallx_int
+          { \dtexFrac { \dtexV{py} + \dtexMulS { \l_dtex_dist_int } { \l_dtex_rdy_int } } } }
+      { \int_set:Nn \l_dtex_wallx_int
+          { \dtexFrac { \dtexV{px} + \dtexMulS { \l_dtex_dist_int } { \l_dtex_rdx_int } } } }
+    % mirror the texture on the two faces that would otherwise read backwards
+    \bool_lazy_or:nnT
+      { \bool_lazy_and_p:nn { \int_compare_p:n { \l_dtex_side_int = 0 } }
+                            { \int_compare_p:n { \l_dtex_rdx_int > 0 } } }
+      { \bool_lazy_and_p:nn { \int_compare_p:n { \l_dtex_side_int = 1 } }
+                            { \int_compare_p:n { \l_dtex_rdy_int < 0 } } }
+      { \int_set:Nn \l_dtex_wallx_int { 1023 - \l_dtex_wallx_int } }
+
+    \cs_gset:cpx { dtex_z_ \int_eval:n {#1} : } { \int_use:N \l_dtex_dist_int }
+    \cs_gset:cpx { dtex_w_ \int_eval:n {#1} : }
+      { \int_eval:n { \dtexCell { \l_dtex_mapx_int } { \l_dtex_mapy_int } } }
+    \cs_gset:cpx { dtex_u_ \int_eval:n {#1} : }
+      { \dtexFloorDiv { \l_dtex_wallx_int } {32} }
+    \cs_gset:cpx { dtex_side_ \int_eval:n {#1} : } { \int_use:N \l_dtex_side_int }
+  }
+
+%% Expandable accessors for the column buffer.
+\cs_new:Npn \dtexZ    #1 { \cs_if_exist_use:cF { dtex_z_    \int_eval:n {#1} : } {1024} }
+\cs_new:Npn \dtexWall #1 { \cs_if_exist_use:cF { dtex_w_    \int_eval:n {#1} : } {1} }
+\cs_new:Npn \dtexU    #1 { \cs_if_exist_use:cF { dtex_u_    \int_eval:n {#1} : } {0} }
+\cs_new:Npn \dtexSide #1 { \cs_if_exist_use:cF { dtex_side_ \int_eval:n {#1} : } {0} }
+
+\cs_new_protected:Npn \dtexCastAll
+  {
+    \dtexSetCamera
+    \int_step_inline:nnn {0} { \c_dtex_screen_w_int - 1 } { \dtexCastColumn {##1} }
+  }
+
+\ExplSyntaxOff

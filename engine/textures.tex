@@ -1,0 +1,143 @@
+%% DoomTex :: engine/textures.tex
+%% Wall textures, 32x32, one palette index per texel.
+%%
+%% The bitmaps are computed by TeX from pattern arithmetic and a small
+%% integer hash -- no external tool draws them -- then cached to disk as
+%% flat \dtexT calls so later frames pay nothing.  Every texel becomes its
+%% own control sequence, making sampling an O(1) hash probe instead of an
+%% O(n) walk along a string.
+%%
+%%   texture 1 = brick     2 = tech panel
+%%   texture 3 = stone     4 = door
+\ExplSyntaxOn
+
+\int_new:N \l_dtex_tx_int \int_new:N \l_dtex_ty_int
+\int_new:N \l_dtex_th_int \int_new:N \l_dtex_tv_int
+
+%% \dtexT {tex} {u} {v} {palette index}
+\cs_new_protected:Npn \dtexT #1#2#3#4
+  { \cs_gset:cpn { dtex_t_ #1 _ #2 _ #3 : } {#4} }
+
+%% Expandable texel fetch; anything undefined reads as void black.
+\cs_new:Npn \dtexTexel #1#2#3
+  { \cs_if_exist_use:cF
+      { dtex_t_ \int_eval:n {#1} _ \int_eval:n {#2} _ \int_eval:n {#3} : } {0} }
+
+%% A cheap deterministic hash, used for stone mottling and brick variation.
+\cs_new:Npn \dtexHash #1#2
+  { \int_eval:n { \int_mod:nn { (#1)*73 + (#2)*151 + (#1)*(#2)*17 + 7 } {101} } }
+
+%% ---------- texture 1 : brick ----------
+%% 16x8 bricks, alternate courses offset by half a brick, 1px mortar.
+\cs_new:Npn \dtex_brick:nn #1#2 % u, v
+  {
+    \int_compare:nNnTF { \int_mod:nn {#2} {8} } = {0}
+      { 1 }  % horizontal mortar course
+      {
+        \int_compare:nNnTF
+          { \int_mod:nn { (#1) + 8 * \int_mod:nn { \dtexFloorDiv{#2}{8} } {2} } {16} } = {0}
+          { 1 }  % vertical mortar joint
+          {
+            \int_compare:nNnTF { \dtexHash { \dtexFloorDiv{#1}{16} } { \dtexFloorDiv{#2}{8} } } > {50}
+              { \int_compare:nNnTF { \int_mod:nn {#2} {8} } < {3} {5} {4} }
+              { \int_compare:nNnTF { \int_mod:nn {#2} {8} } < {3} {6} {5} }
+          }
+      }
+  }
+
+%% ---------- texture 2 : tech panel ----------
+%% Riveted steel-blue plating with recessed panel seams.
+\cs_new:Npn \dtex_tech:nn #1#2
+  {
+    \bool_lazy_or:nnTF
+      { \int_compare_p:n { \int_mod:nn {#2} {16} = 0 } }
+      { \int_compare_p:n { \int_mod:nn {#1} {16} = 0 } }
+      { 10 } % seam
+      {
+        \bool_lazy_and:nnTF
+          { \int_compare_p:n { \int_mod:nn {#1} {16} = 8 } }
+          { \int_compare_p:n { \int_mod:nn {#2} {16} = 8 } }
+          { 12 } % rivet highlight
+          {
+            \int_compare:nNnTF { \int_mod:nn {#2} {16} } < {2}
+              { 12 }  % lit top edge of each plate
+              { \int_compare:nNnTF { \int_mod:nn {#2} {16} } > {13} { 10 } { 11 } }
+          }
+      }
+  }
+
+%% ---------- texture 3 : stone ----------
+%% Chunky grey ashlar.  Mottling is sampled on a 4px grid rather than a
+%% 2px one: fine noise aliases into shimmer once a wall is far away.
+\cs_new:Npn \dtex_stone:nn #1#2
+  {
+    \bool_lazy_or:nnTF
+      { \int_compare_p:n { \int_mod:nn {#2} {16} = 0 } }
+      { \int_compare_p:n
+          { \int_mod:nn { (#1) + 8 * \int_mod:nn { \dtexFloorDiv{#2}{16} } {2} } {16} = 0 } }
+      { 7 }  % deep seams between blocks
+      {
+        \int_compare:nNnTF { \dtexHash { \dtexFloorDiv{#1}{4} } { \dtexFloorDiv{#2}{4} } } > {70}
+          { 9 }
+          { \int_compare:nNnTF
+              { \dtexHash { \dtexFloorDiv{#1}{4} } { \dtexFloorDiv{#2}{4} } } > {30}
+              { 8 } { 7 } }
+      }
+  }
+
+%% ---------- texture 4 : door ----------
+%% Brass door: heavy frame, central seam, hazard band across the middle.
+\cs_new:Npn \dtex_door:nn #1#2
+  {
+    \bool_lazy_or:nnTF
+      { \int_compare_p:n { #1 < 2 } } { \int_compare_p:n { #1 > 29 } }
+      { 7 }  % frame
+      {
+        \bool_lazy_or:nnTF
+          { \int_compare_p:n { #2 < 2 } } { \int_compare_p:n { #2 > 29 } }
+          { 7 }
+          {
+            \bool_lazy_or:nnTF
+              { \int_compare_p:n { #1 = 15 } } { \int_compare_p:n { #1 = 16 } }
+              { 7 }  % centre seam
+              {
+                \int_compare:nNnTF { #2 } > {13}
+                  { \int_compare:nNnTF { #2 } < {19}
+                      % hazard chevrons
+                      { \int_compare:nNnTF { \int_mod:nn { (#1) + (#2) } {8} } < {4} {14} {7} }
+                      {14} }
+                  {14}
+              }
+          }
+      }
+  }
+
+%% ---------- generation and caching ----------
+\cs_new_protected:Npn \dtex_build_textures:
+  {
+    \iow_open:Nn \g_dtex_cache_iow { cache/textab.tex }
+    \iow_now:Nx \g_dtex_cache_iow
+      { \c_percent_str \c_space_tl DoomTex~wall~textures~--~generated~by~TeX,~do~not~edit }
+    \int_step_inline:nnn {0} {31}
+      {
+        \int_step_inline:nnn {0} {31}
+          {
+            \iow_now:Nx \g_dtex_cache_iow
+              {
+                \c_backslash_str dtexT {1} {##1} {####1} { \dtex_brick:nn {##1} {####1} }
+                \c_backslash_str dtexT {2} {##1} {####1} { \dtex_tech:nn  {##1} {####1} }
+                \c_backslash_str dtexT {3} {##1} {####1} { \dtex_stone:nn {##1} {####1} }
+                \c_backslash_str dtexT {4} {##1} {####1} { \dtex_door:nn  {##1} {####1} }
+              }
+          }
+      }
+    \iow_close:N \g_dtex_cache_iow
+  }
+
+\cs_new_protected:Npn \dtexLoadTextures:
+  {
+    \file_if_exist:nF { cache/textab.tex } { \dtex_build_textures: }
+    \file_input:n { cache/textab.tex }
+  }
+
+\ExplSyntaxOff

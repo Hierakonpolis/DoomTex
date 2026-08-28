@@ -1,0 +1,201 @@
+%% DoomTex :: engine/sprites.tex
+%% Actor and weapon artwork.
+%%
+%% Unlike the wall textures, these are drawn by hand: pattern arithmetic
+%% will happily produce convincing brickwork but it will never produce a
+%% recognisable imp.  Each sprite is 24x24, one character per pixel.
+%%
+%%   . transparent   k black     d dark red   m red      h orange
+%%   w white         g mid grey  G lt grey    D dk grey  y brass
+%%   b dk brown      t mid brown
+\ExplSyntaxOn
+
+\int_new:N \l_dtex_sp_u_int
+
+%% 255 is the transparency sentinel; no palette entry uses it.
+\cs_new:Npn \dtex_sp_pal:n #1
+  {
+    \str_case:nnF {#1}
+      {
+        {k}{0} {b}{1} {t}{2} {d}{4} {m}{5} {h}{6}
+        {D}{7} {g}{8} {G}{9} {y}{14} {w}{15}
+      } {255}
+  }
+
+%% \dtexSpriteRow {sprite id} {row} {24 characters}
+\cs_new_protected:Npn \dtexSpriteRow #1#2#3
+  {
+    \int_zero:N \l_dtex_sp_u_int
+    \tl_map_inline:nn {#3}
+      {
+        \cs_gset:cpx
+          { dtex_sp_ \int_eval:n {#1} _ \int_use:N \l_dtex_sp_u_int _ \int_eval:n {#2} : }
+          { \dtex_sp_pal:n {##1} }
+        \int_incr:N \l_dtex_sp_u_int
+      }
+  }
+
+%% Expandable texel fetch; off-sprite reads as transparent.
+\cs_new:Npn \dtexSpTexel #1#2#3
+  { \cs_if_exist_use:cF
+      { dtex_sp_ \int_eval:n {#1} _ \int_eval:n {#2} _ \int_eval:n {#3} : } {255} }
+
+\int_const:Nn \c_dtex_sprite_dim_int {24}
+
+%% ---------- sprite 1 : imp, upright ----------
+\dtexSpriteRow{1}{0}  {........................}
+\dtexSpriteRow{1}{1}  {.......d........d.......}
+\dtexSpriteRow{1}{2}  {.......dd......dd.......}
+\dtexSpriteRow{1}{3}  {........dd.dd.dd........}
+\dtexSpriteRow{1}{4}  {........dddddddd........}
+\dtexSpriteRow{1}{5}  {.......dmmmmmmmmd.......}
+\dtexSpriteRow{1}{6}  {......dmmwwmmwwmmd......}
+\dtexSpriteRow{1}{7}  {......dmmwkmmwkmmd......}
+\dtexSpriteRow{1}{8}  {......dmmmmmmmmmmd......}
+\dtexSpriteRow{1}{9}  {......dmmmhhhhmmmd......}
+\dtexSpriteRow{1}{10} {.......dmmhhhhmmd.......}
+\dtexSpriteRow{1}{11} {........dmmmmmmd........}
+\dtexSpriteRow{1}{12} {.......ddmmmmmmdd.......}
+\dtexSpriteRow{1}{13} {......d.dmmmmmmd.d......}
+\dtexSpriteRow{1}{14} {.....d..dmmmmmmd..d.....}
+\dtexSpriteRow{1}{15} {....d...dmmmmmmd...d....}
+\dtexSpriteRow{1}{16} {....d...dmmmmmmd...d....}
+\dtexSpriteRow{1}{17} {........dmmmmmmd........}
+\dtexSpriteRow{1}{18} {........dmmddmmd........}
+\dtexSpriteRow{1}{19} {.......dd.d..d.dd.......}
+\dtexSpriteRow{1}{20} {......dd..d..d..dd......}
+\dtexSpriteRow{1}{21} {.....dd...d..d...dd.....}
+\dtexSpriteRow{1}{22} {.....d....d..d....d.....}
+\dtexSpriteRow{1}{23} {..........dd.dd.........}
+
+%% ---------- sprite 2 : imp, dead ----------
+\dtexSpriteRow{2}{0}  {........................}
+\dtexSpriteRow{2}{1}  {........................}
+\dtexSpriteRow{2}{2}  {........................}
+\dtexSpriteRow{2}{3}  {........................}
+\dtexSpriteRow{2}{4}  {........................}
+\dtexSpriteRow{2}{5}  {........................}
+\dtexSpriteRow{2}{6}  {........................}
+\dtexSpriteRow{2}{7}  {........................}
+\dtexSpriteRow{2}{8}  {........................}
+\dtexSpriteRow{2}{9}  {........................}
+\dtexSpriteRow{2}{10} {........................}
+\dtexSpriteRow{2}{11} {........................}
+\dtexSpriteRow{2}{12} {........................}
+\dtexSpriteRow{2}{13} {........................}
+\dtexSpriteRow{2}{14} {.....d..............d...}
+\dtexSpriteRow{2}{15} {....dd.ddd......ddd.dd..}
+\dtexSpriteRow{2}{16} {...dmd.dmmd....dmmd.dmd.}
+\dtexSpriteRow{2}{17} {..dmmmdmmmmddddmmmmdmmd.}
+\dtexSpriteRow{2}{18} {.dmmmmmmmmmmmmmmmmmmmmd.}
+\dtexSpriteRow{2}{19} {.dmwkmmmmhhhhhhmmmmkwmd.}
+\dtexSpriteRow{2}{20} {.ddmmmmmmmmmmmmmmmmmmdd.}
+\dtexSpriteRow{2}{21} {..dddmmmmmmmmmmmmmmddd..}
+\dtexSpriteRow{2}{22} {....ddddddddddddddddd...}
+\dtexSpriteRow{2}{23} {.......ddd......ddd.....}
+
+%% ---------- sprite 3 : medkit ----------
+\dtexSpriteRow{3}{0}  {........................}
+\dtexSpriteRow{3}{1}  {........................}
+\dtexSpriteRow{3}{2}  {........................}
+\dtexSpriteRow{3}{3}  {........................}
+\dtexSpriteRow{3}{4}  {........................}
+\dtexSpriteRow{3}{5}  {........................}
+\dtexSpriteRow{3}{6}  {........................}
+\dtexSpriteRow{3}{7}  {........................}
+\dtexSpriteRow{3}{8}  {.....DDDDDDDDDDDDDD.....}
+\dtexSpriteRow{3}{9}  {.....DwwwwwwwwwwwwD.....}
+\dtexSpriteRow{3}{10} {.....DwwwwwmmwwwwwD.....}
+\dtexSpriteRow{3}{11} {.....DwwwwwmmwwwwwD.....}
+\dtexSpriteRow{3}{12} {.....DwwwmmmmmmwwwD.....}
+\dtexSpriteRow{3}{13} {.....DwwwmmmmmmwwwD.....}
+\dtexSpriteRow{3}{14} {.....DwwwwwmmwwwwwD.....}
+\dtexSpriteRow{3}{15} {.....DwwwwwmmwwwwwD.....}
+\dtexSpriteRow{3}{16} {.....DwwwwwwwwwwwwD.....}
+\dtexSpriteRow{3}{17} {.....DDDDDDDDDDDDDD.....}
+\dtexSpriteRow{3}{18} {......kkkkkkkkkkkk......}
+\dtexSpriteRow{3}{19} {........................}
+\dtexSpriteRow{3}{20} {........................}
+\dtexSpriteRow{3}{21} {........................}
+\dtexSpriteRow{3}{22} {........................}
+\dtexSpriteRow{3}{23} {........................}
+
+%% ---------- sprite 4 : ammo clip ----------
+\dtexSpriteRow{4}{0}  {........................}
+\dtexSpriteRow{4}{1}  {........................}
+\dtexSpriteRow{4}{2}  {........................}
+\dtexSpriteRow{4}{3}  {........................}
+\dtexSpriteRow{4}{4}  {........................}
+\dtexSpriteRow{4}{5}  {........................}
+\dtexSpriteRow{4}{6}  {........................}
+\dtexSpriteRow{4}{7}  {........................}
+\dtexSpriteRow{4}{8}  {........................}
+\dtexSpriteRow{4}{9}  {........................}
+\dtexSpriteRow{4}{10} {.......DDDDDDDDDD.......}
+\dtexSpriteRow{4}{11} {.......DyyyyyyyyD.......}
+\dtexSpriteRow{4}{12} {.......DyGyGyGyyD.......}
+\dtexSpriteRow{4}{13} {.......DyGyGyGyyD.......}
+\dtexSpriteRow{4}{14} {.......DyGyGyGyyD.......}
+\dtexSpriteRow{4}{15} {.......DyyyyyyyyD.......}
+\dtexSpriteRow{4}{16} {.......DDDDDDDDDD.......}
+\dtexSpriteRow{4}{17} {........kkkkkkkk........}
+\dtexSpriteRow{4}{18} {........................}
+\dtexSpriteRow{4}{19} {........................}
+\dtexSpriteRow{4}{20} {........................}
+\dtexSpriteRow{4}{21} {........................}
+\dtexSpriteRow{4}{22} {........................}
+\dtexSpriteRow{4}{23} {........................}
+
+%% ---------- sprite 5 : the pistol, held ----------
+\dtexSpriteRow{5}{0} {........................}
+\dtexSpriteRow{5}{1} {........................}
+\dtexSpriteRow{5}{2} {........................}
+\dtexSpriteRow{5}{3} {..........DDDD..........}
+\dtexSpriteRow{5}{4} {..........DggD..........}
+\dtexSpriteRow{5}{5} {..........DggD..........}
+\dtexSpriteRow{5}{6} {..........DggD..........}
+\dtexSpriteRow{5}{7} {..........DggD..........}
+\dtexSpriteRow{5}{8} {.........DGggGD.........}
+\dtexSpriteRow{5}{9} {.........DGggGD.........}
+\dtexSpriteRow{5}{10} {........DDGggGDD........}
+\dtexSpriteRow{5}{11} {........DGGggGGD........}
+\dtexSpriteRow{5}{12} {........DGgggggD........}
+\dtexSpriteRow{5}{13} {........DGgggggD........}
+\dtexSpriteRow{5}{14} {.......DDGgggggDD.......}
+\dtexSpriteRow{5}{15} {.......DGGgggggGD.......}
+\dtexSpriteRow{5}{16} {.......DGgggggggD.......}
+\dtexSpriteRow{5}{17} {.......DtbbbbbbtD.......}
+\dtexSpriteRow{5}{18} {......DtbbbbbbbbtD......}
+\dtexSpriteRow{5}{19} {......DtbbbbbbbbtD......}
+\dtexSpriteRow{5}{20} {......DtbbbbbbbbtD......}
+\dtexSpriteRow{5}{21} {......DDtbbbbbbtDD......}
+\dtexSpriteRow{5}{22} {.......DDDDDDDDDD.......}
+\dtexSpriteRow{5}{23} {........................}
+
+%% ---------- sprite 6 : muzzle flash ----------
+\dtexSpriteRow{6}{0}  {........................}
+\dtexSpriteRow{6}{1}  {..........hh............}
+\dtexSpriteRow{6}{2}  {.........hwwh...........}
+\dtexSpriteRow{6}{3}  {....h...hwwwwh...h......}
+\dtexSpriteRow{6}{4}  {.....h.hhwwwwhh.h.......}
+\dtexSpriteRow{6}{5}  {......hhhwwwwhhh........}
+\dtexSpriteRow{6}{6}  {...hhhhwwwwwwwwhhhh.....}
+\dtexSpriteRow{6}{7}  {....hhhwwwwwwwwhhh......}
+\dtexSpriteRow{6}{8}  {......hhhwwwwhhh........}
+\dtexSpriteRow{6}{9}  {.....h.hhwwwwhh.h.......}
+\dtexSpriteRow{6}{10} {....h...hwwwwh...h......}
+\dtexSpriteRow{6}{11} {.........hwwh...........}
+\dtexSpriteRow{6}{12} {..........hh............}
+\dtexSpriteRow{6}{13} {........................}
+\dtexSpriteRow{6}{14} {........................}
+\dtexSpriteRow{6}{15} {........................}
+\dtexSpriteRow{6}{16} {........................}
+\dtexSpriteRow{6}{17} {........................}
+\dtexSpriteRow{6}{18} {........................}
+\dtexSpriteRow{6}{19} {........................}
+\dtexSpriteRow{6}{20} {........................}
+\dtexSpriteRow{6}{21} {........................}
+\dtexSpriteRow{6}{22} {........................}
+\dtexSpriteRow{6}{23} {........................}
+
+\ExplSyntaxOff
